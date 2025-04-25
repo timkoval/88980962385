@@ -1,6 +1,12 @@
-use std::collections::HashMap;
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    routing::{get, post},
+    Json, Router,
+};
+use serde::{Deserialize, Serialize};
 
-use axum::http::StatusCode;
+use crate::{ApiContext, Error, Result};
 
 #[derive(Serialize, Deserialize)]
 struct Movie {
@@ -12,21 +18,28 @@ struct Movie {
 
 pub(crate) fn router() -> Router<ApiContext> {
     Router::new()
-        .route("/movie/:id", get(get_user))
-        .route("/movie", post(create_user))
+        .route("/movie/:id", get(get_movie))
+        .route("/movie", post(create_movie))
 }
 
 async fn create_movie(
-    ctx: State<ApiContext>,
+    mut ctx: State<ApiContext>,
     Json(req): Json<Movie>,
 ) -> Result<(StatusCode, Json<Movie>)> {
-    let
-    (StatusCode::CREATED, Json(user))
+    let movie_id = req.id.clone();
+    let movie_str = serde_json::to_string(&req)?;
+    ctx.storage.insert(movie_id, movie_str);
+    Ok((StatusCode::CREATED, Json(req)))
 }
 
-async fn get_user(
+async fn get_movie(
     ctx: State<ApiContext>,
-    Path(id): Path<u64>,
+    Path(id): Path<String>,
 ) -> Result<(StatusCode, Json<Movie>)> {
-    (StatusCode::OK, Json(user))
+    if let Some(movie) = ctx.storage.get(&id) {
+        let movie = serde_json::from_str(movie)?;
+        Ok((StatusCode::OK, Json(movie)))
+    } else {
+        Err(Error::NotFound) // might be better returning empty object
+    }
 }

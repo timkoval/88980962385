@@ -1,29 +1,56 @@
 pub mod http;
 
+use axum::Router;
+use http::movies;
+use std::collections::HashMap;
+use tokio::net::TcpListener;
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    // 401 Unauthorized
+    #[error("authorization required")]
+    Unauthorized,
+
+    // 403 Forbidden
+    #[error("user may not perform this action")]
+    Forbidden,
+
+    // 404 Not Found
+    #[error("resource not found")]
+    NotFound,
+
+    #[error(transparent)]
+    SerializationError(#[from] serde_json::Error),
+    // // 422 Unprocessable Entity
+    // #[error("invalid request body")]
+    // UnprocessableEntity {
+    //     errors: HashMap<Cow<'static, str>, Vec<Cow<'static, str>>>,
+    // },
+}
+
+pub type Result<T, E = Error> = std::result::Result<T, E>;
+
 #[derive(Clone)]
 pub(crate) struct ApiContext {
-    pub storage: HashMap<String, Movie>,
+    pub storage: HashMap<String, String>, // TODO: wrap in threadsafe
 }
 
 pub async fn serve() {
     let api_context = ApiContext {
-        config: Arc::new(config),
-        db,
+        storage: HashMap::new(),
     };
 
     let app = api_router(api_context);
 
-    let addr = SocketAddr::from((Ipv4Addr::UNSPECIFIED, 8080));
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
+    let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    axum::serve(listener, app)
         .await
-        .context("failed to run HTTP server")
+        .expect("failed to run HTTP server");
 }
 
 fn api_router(api_context: ApiContext) -> Router {
     Router::new()
-        .merge(users::router())
-        .merge(profiles::router())
+        .merge(movies::router())
         // .layer(TraceLayer::new_for_http())
         .with_state(api_context)
 }
